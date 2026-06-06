@@ -1,24 +1,21 @@
-# RCM Controller — Mathematical Derivations
+# RCM Controller — Math Notes
 
-This document contains the full mathematical foundation for the 
-software-defined Remote Center of Motion (RCM) controller implemented 
-in `robot/kinematics.py` and `robot/controller.py`.
+These are the derivations behind `robot/kinematics.py` and `robot/controller.py`.
 
 ---
 
-## 1. Robot Model — UR5 DH Parameters
+## 1. UR5 DH Parameters
 
-The UR5 is modeled using the Denavit-Hartenberg (DH) convention. Each 
-joint is described by four parameters:
+The UR5 is modelled using Denavit-Hartenberg convention. Four parameters per joint:
 
 | Parameter | Meaning |
 |-----------|---------|
-| a | Link length — distance along X axis |
-| d | Link offset — distance along Z axis |
-| α (alpha) | Link twist — rotation around X axis |
-| θ (theta) | Joint angle — rotation around Z axis (variable) |
+| a | Link length (along X) |
+| d | Link offset (along Z) |
+| α | Link twist (rotation around X) |
+| θ | Joint angle (rotation around Z, this is the variable) |
 
-The transformation matrix for a single joint is:
+Transform for one joint:
 ```
 T = | cos θ   -sin θ·cos α    sin θ·sin α   a·cos θ |
     | sin θ    cos θ·cos α   -cos θ·sin α   a·sin θ |
@@ -26,7 +23,7 @@ T = | cos θ   -sin θ·cos α    sin θ·sin α   a·cos θ |
     |   0           0              0             1    |
 ```
 
-UR5 parameters (Universal Robots technical documentation):
+UR5 values from the Universal Robots datasheet:
 
 | Joint | a (m)    | d (m)    | α (rad) |
 |-------|----------|----------|---------|
@@ -41,186 +38,162 @@ UR5 parameters (Universal Robots technical documentation):
 
 ## 2. Forward Kinematics
 
-The full FK transform from base to end effector is the chained product 
-of all six joint transforms:
+Chain the six joint transforms:
 ```
 T_0_to_6 = T1 × T2 × T3 × T4 × T5 × T6
 ```
 
-Each Ti is computed from the DH parameters of joint i with the current 
-joint angle θi. The end effector position is extracted from the top-right 
-3×1 column of T_0_to_6.
+End effector position is the top-right 3×1 column of the result.
 
-Tool points are computed from the wrist transform T6:
+Tool points come from the wrist frame T6. The tool shaft runs along the wrist
+Z axis, so:
 ```
 p_trocar = p_wrist + trocar_depth × u_shaft
 p_tip    = p_wrist + tool_length  × u_shaft
 ```
 
-Where u_shaft is the Z axis of the wrist frame (third column of T6's 
-rotation matrix), normalized to unit length.
+u_shaft is the third column of T6's rotation block.
 
 ---
 
 ## 3. Geometric Jacobian
 
-For a revolute joint i, the contribution to the velocity of a point p 
-on the robot is:
+For revolute joint i, contribution to velocity of point p:
 ```
 J_column_i = z_{i-1} × (p - p_{i-1})
 ```
 
-Where:
-- z_{i-1} is the rotation axis of joint i (Z axis of frame i-1)
-- p_{i-1} is the origin of frame i-1
-- × denotes the cross product
+z_{i-1} is the joint rotation axis (Z of frame i-1), p_{i-1} is its origin,
+× is cross product. This comes from basic rotation kinematics — velocity of a
+point due to rotation about an axis is the cross product of the axis direction
+and the lever arm.
 
-This follows from the physics of rotation — a joint rotating about 
-axis z moves point p with velocity proportional to the perpendicular 
-distance from the axis, in the direction perpendicular to both z and 
-the lever arm.
-
-The full 3×6 Jacobian stacks these column vectors:
+Full 3×6 Jacobian:
 ```
 J = [J_col_1 | J_col_2 | J_col_3 | J_col_4 | J_col_5 | J_col_6]
 ```
 
-Two Jacobians are computed per timestep:
-- J_rcm — for the trocar point
-- J_tip — for the tool tip
+Two Jacobians per timestep: J_rcm (trocar point) and J_tip (tool tip).
 
-> **Scope note:** This implementation uses a position-only Jacobian (3×6). Orientation
-> control would extend this to a 6×6 geometric Jacobian including angular velocity rows.
+Note: position-only, so 3×6 not 6×6. Orientation control would need the full
+6×6 geometric Jacobian with angular velocity rows.
 
 ---
 
 ## 4. Damped Least Squares
 
-The standard pseudoinverse J† = Jᵀ(JJᵀ)⁻¹ becomes numerically unstable 
-near singular configurations where det(JJᵀ) → 0, producing unbounded 
-joint velocities.
+Plain pseudoinverse J† = Jᵀ(JJᵀ)⁻¹ breaks near singularities where det(JJᵀ)
+approaches zero — the inversion produces huge joint velocities.
 
-The damped least squares pseudoinverse adds a regularization term:
+Fix: add a regularization term:
 ```
 J†_damped = Jᵀ(JJᵀ + λ²I)⁻¹
 ```
 
-This guarantees the smallest eigenvalue of (JJᵀ + λ²I) is at least λ², 
-preventing division by near-zero values.
-
-In SVD terms, if J = UΣVᵀ, each singular value σi is modified:
+The smallest eigenvalue of (JJᵀ + λ²I) is at least λ², so the inversion is
+always stable. In SVD terms (J = UΣVᵀ):
 ```
 σi → σi / (σi² + λ²)
 ```
 
-When σi is large: σi/(σi² + λ²) ≈ 1/σi — same as undamped.  
-When σi → 0: σi/(σi² + λ²) → 0 — gain is suppressed, not exploded.
+When σi is large this is roughly 1/σi (same as before). When σi → 0 the
+output goes to 0 rather than blowing up.
 
-Parameter selection: λ=0.01 confirmed via sweep over 
-[0.001, 0.01, 0.05, 0.1, 0.5]. Values above 0.01 produce RCM errors 
-exceeding the 0.5mm target. Values below 0.01 risk instability near 
-singularities.
+λ=0.01 was picked by sweeping [0.001, 0.01, 0.05, 0.1, 0.5]. Higher values
+hurt accuracy, lower values risk instability.
 
 ---
 
 ## 5. Null-Space Controller
 
-The system has 6 joints (DOF) but only 3 RCM constraints (X, Y, Z of 
-trocar point). The remaining 3 DOF form the null space of J_rcm — joint 
-motions that produce zero trocar velocity.
+6 joints, 3 constraints (X/Y/Z of trocar point). That leaves 3 degrees of
+freedom that don't affect the trocar — the null space of J_rcm.
 
-The null space projector is:
+Null space projector:
 ```
 N = I - J†_rcm × J_rcm
 ```
 
-Idealized case — exact Moore-Penrose pseudoinverse:
+For any v, J_rcm × (N × v) = 0. Proof for the idealized case (exact
+Moore-Penrose pseudoinverse):
 ```
 J_rcm × N × v
 = J_rcm × (I - J†_rcm × J_rcm) × v
 = (J_rcm - J_rcm × J†_rcm × J_rcm) × v
-= (J_rcm - J_rcm) × v    ← holds because J×J†×J = J for exact pseudoinverse
+= (J_rcm - J_rcm) × v    ← because J×J†×J = J for exact pseudoinverse
 = 0
 ```
 
-The dual-task controller combines:
+Controller output:
 ```
-dq = J†_rcm × (K1 × e_rcm)              ← primary: lock trocar
-   + N × J†_tip × (K2 × e_tip)          ← secondary: track tip in null space
+dq = J†_rcm × (K1 × e_rcm)        ← primary: drive trocar error to zero
+   + N × J†_tip × (K2 × e_tip)    ← secondary: tip tracking in null space
 ```
 
-The primary task drives RCM error to zero. The secondary task projects tip
-tracking into the RCM null space, minimizing disturbance of the trocar
-constraint. With the exact Moore-Penrose pseudoinverse this projection is
-exact; the damped LS pseudoinverse introduces small leakage, which is why
-drift correction is included.
+The secondary term gets projected through N so it can't affect the trocar
+in the idealized case. With damped LS the projection isn't exact — there's
+small leakage, which is why drift correction exists.
 
-> **Scope note:** The RCM constraint is enforced as a point-position task — joint
-> velocities are chosen to hold the trocar point stationary. A geometrically strict
-> formulation would additionally constrain the tool shaft line to pass through the
-> trocar point. This is a standard simplification in software-defined RCM literature.
+Note: the trocar constraint here is point-position only. A stricter
+formulation would also constrain the shaft line to pass through the trocar
+geometrically. This simplification is common in software-defined RCM work.
 
 ---
 
 ## 6. Singularity Detection
 
-Manipulability is tracked throughout simulation:
+Manipulability measure:
 ```
 w = sqrt(det(J × Jᵀ)) = σ1 × σ2 × σ3
 ```
 
-Where σ1, σ2, σ3 are the singular values of J from SVD decomposition. 
-When w approaches zero the robot is near a singularity. The damped 
-least squares formulation prevents controller failure at these 
-configurations.
+σ1, σ2, σ3 are singular values from SVD. As w → 0 the robot approaches a
+singularity. Damped LS keeps the controller from failing at these points.
 
 ---
 
 ## 7. Drift Correction
 
-Numerical integration accumulates floating point error over time. 
-Every correction_interval steps, trocar drift is measured directly:
+Euler integration accumulates error. Every `correction_interval` steps,
+measure trocar drift directly:
 ```
 e_drift = p_rcm_actual - p_rcm_target
 ```
 
-If ||e_drift|| exceeds drift_threshold, a corrective joint displacement 
-is applied:
+If the norm exceeds `drift_threshold`, apply a correction:
 ```
-dq_correction = J†_rcm × (K_correction × e_drift)
+dq_correction = J†_rcm × (K1 × e_drift)
 q = q + dq_correction
 ```
 
-This is applied outside the velocity control loop as a direct position 
-correction. In 500 steps at dt=0.01, drift correction fired 2 times.
+This is a direct position fix, separate from the velocity loop. Fired 2 times
+across 500 steps in the test run.
 
-> **Integration note:** Joint integration uses the first-order Euler method
-> (q ← q + dq·dt). Higher-order integration (e.g., Runge-Kutta) would reduce
-> accumulated error at larger timesteps.
-
----
-
-## 8. Force Modeling — Scope Note
-
-Current implementation is kinematic only. Published surgical robotics literature
-cites RCM tolerance requirements under lateral load (e.g., 31 N) and torque at
-the trocar point (e.g., 5.6 Nm) as representative benchmarks. Force-aware control
-incorporating tool-tissue interaction models is a natural extension for future work.
+Note: integration uses first-order Euler (q ← q + dq·dt). Runge-Kutta would
+reduce accumulated error at larger timesteps.
 
 ---
 
-## 9. Results Summary
+## 8. What's not modelled
 
-All metrics from actual simulation runs. No fabricated values.
+This is kinematics only. No force modelling. Literature cites things like 31 N
+lateral load tolerance and 5.6 Nm torque at the trocar as representative
+benchmarks — a force-aware controller would need to account for these.
+
+---
+
+## 9. Results
+
+Numbers from actual runs, not made up.
 
 | Metric | Value |
 |--------|-------|
 | RCM error mean | 0.0777 mm |
 | RCM error max | 0.5475 mm |
 | RCM error std | 0.0717 mm |
-| Representative tolerance (literature) | 29.8 mm |
-| Margin vs representative tolerance | 384x |
+| Tolerance from literature | 29.8 mm |
+| Margin | 384x |
 | Naive controller mean | 195.4 mm |
 | Drift corrections (500 steps) | 2 |
-| λ selected | 0.01 |
-| Timestep dt | 0.01 s |
+| λ | 0.01 |
+| dt | 0.01 s |
