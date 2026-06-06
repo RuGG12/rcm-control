@@ -36,8 +36,8 @@ joint velocities bounded across all configurations.
 
 Three specific design choices matter:
 
-- **Null-space projection** — tip tracking is mathematically guaranteed to never 
-  disturb the trocar point
+- **Null-space projection** — tip tracking is projected into the RCM task null
+  space, minimizing disturbance of the trocar constraint
 - **Damped least squares** — joint velocities stay bounded near singularities 
   where plain pseudoinverse fails
 - **Periodic drift correction** — numerical integration error is caught and 

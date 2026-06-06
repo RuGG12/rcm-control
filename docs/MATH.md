@@ -149,9 +149,11 @@ dq = J†_rcm × (K1 × e_rcm)              ← primary: lock trocar
    + N × J†_tip × (K2 × e_tip)          ← secondary: track tip in null space
 ```
 
-The primary task drives RCM error to zero. The secondary task moves the 
-tip toward its target using only null space motion — mathematically 
-guaranteed not to disturb the trocar point.
+The primary task drives RCM error to zero. The secondary task projects tip
+tracking into the RCM null space, minimizing disturbance of the trocar
+constraint. With the exact Moore-Penrose pseudoinverse this projection is
+exact; the damped LS pseudoinverse introduces small leakage, which is why
+drift correction is included.
 
 > **Scope note:** The RCM constraint is enforced as a point-position task — joint
 > velocities are chosen to hold the trocar point stationary. A geometrically strict
