@@ -134,12 +134,12 @@ The null space projector is:
 N = I - J†_rcm × J_rcm
 ```
 
-For any vector v, N×v satisfies J_rcm × (N×v) = 0. Proof:
+Idealized case — exact Moore-Penrose pseudoinverse:
 ```
 J_rcm × N × v
 = J_rcm × (I - J†_rcm × J_rcm) × v
 = (J_rcm - J_rcm × J†_rcm × J_rcm) × v
-= (J_rcm - J_rcm) × v    ← because J×J†×J = J
+= (J_rcm - J_rcm) × v    ← holds because J×J†×J = J for exact pseudoinverse
 = 0
 ```
 
