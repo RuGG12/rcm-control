@@ -10,33 +10,35 @@ from robot.kinematics import (
     dh_transform
 )
 
+
 def test_fk_dimensions():
     q = np.zeros(6)
     T, transforms = forward_kinematics(q)
     assert T.shape == (4, 4), "FK output must be 4x4"
     assert len(transforms) == 6, "Must have 6 intermediate transforms"
-    print("✓ test_fk_dimensions")
+    print("PASS test_fk_dimensions")
+
 
 def test_fk_bottom_row():
+    # Bottom row of any valid homogeneous transform is always [0, 0, 0, 1]
     q = np.random.uniform(-np.pi, np.pi, 6)
     T, _ = forward_kinematics(q)
     expected = np.array([0, 0, 0, 1])
     assert np.allclose(T[3, :], expected), "Bottom row must be [0,0,0,1]"
-    print("✓ test_fk_bottom_row")
+    print("PASS test_fk_bottom_row")
+
 
 def test_jacobian_dimensions():
     q = np.zeros(6)
     T, transforms = forward_kinematics(q)
     J = compute_jacobian(q, transforms)
     assert J.shape == (3, 6), "Jacobian must be 3x6"
-    print("✓ test_jacobian_dimensions")
+    print("PASS test_jacobian_dimensions")
+
 
 def test_null_space_property():
-    """
-    N = I - J†J
-    For any vector v: J @ N @ v should be near zero.
-    With damped pseudoinverse this is approximate, not exact.
-    """
+    # With the exact pseudoinverse, J @ N @ v = 0 exactly.
+    # With damped LS it's approximate — we just check the leakage is small.
     q = np.zeros(6)
     T, transforms = forward_kinematics(q)
     p_trocar, _ = get_tool_points(transforms[5])
@@ -49,32 +51,27 @@ def test_null_space_property():
     v = np.random.randn(6)
     leakage = np.linalg.norm(J @ N @ v)
 
-    # With damped LS, leakage is small but not zero
     assert leakage < 0.1, f"Null space leakage too large: {leakage:.6f}"
-    print(f"✓ test_null_space_property (leakage={leakage:.6f})")
+    print(f"PASS test_null_space_property (leakage={leakage:.6f})")
+
 
 def test_dls_stability():
-    """
-    DLS pseudoinverse should never produce norm > 1/lambda
-    even near singular configurations.
-    """
+    # DLS pseudoinverse should stay bounded even with a near-singular Jacobian.
     lam = 0.01
-    # Near-singular Jacobian — two identical columns
     J = np.zeros((3, 6))
     J[:, 0] = [1, 0, 0]
-    J[:, 1] = [1, 0, 0]  # duplicate — near singular
+    J[:, 1] = [1, 0, 0]  # duplicate column — near singular
     J[:, 2] = [0, 1, 0]
 
     J_pinv = J.T @ np.linalg.inv(J @ J.T + lam**2 * np.eye(3))
     max_gain = np.linalg.norm(J_pinv, ord=2)
 
     assert max_gain < 1.0 / lam, f"DLS gain too large: {max_gain:.4f}"
-    print(f"✓ test_dls_stability (max_gain={max_gain:.4f})")
+    print(f"PASS test_dls_stability (max_gain={max_gain:.4f})")
+
 
 def test_tool_points_on_shaft():
-    """
-    Trocar and tip must lie on the tool shaft direction from wrist.
-    """
+    # Trocar and tip should both lie along the wrist Z axis.
     q = np.zeros(6)
     T, transforms = forward_kinematics(q)
     p_trocar, p_tip = get_tool_points(transforms[5])
@@ -82,14 +79,13 @@ def test_tool_points_on_shaft():
     u_shaft = transforms[5][:3, 2]
     u_shaft = u_shaft / np.linalg.norm(u_shaft)
 
-    # Both points should be collinear with wrist along u_shaft
     v_trocar = p_trocar - p_wrist
-    v_tip = p_tip - p_wrist
+    v_tip    = p_tip - p_wrist
 
-    # Cross product with u_shaft should be near zero
     assert np.linalg.norm(np.cross(v_trocar, u_shaft)) < 1e-10
-    assert np.linalg.norm(np.cross(v_tip, u_shaft)) < 1e-10
-    print("✓ test_tool_points_on_shaft")
+    assert np.linalg.norm(np.cross(v_tip,    u_shaft)) < 1e-10
+    print("PASS test_tool_points_on_shaft")
+
 
 if __name__ == "__main__":
     test_fk_dimensions()
