@@ -89,6 +89,9 @@ Two Jacobians are computed per timestep:
 - J_rcm — for the trocar point
 - J_tip — for the tool tip
 
+> **Scope note:** This implementation uses a position-only Jacobian (3×6). Orientation
+> control would extend this to a 6×6 geometric Jacobian including angular velocity rows.
+
 ---
 
 ## 4. Damped Least Squares
@@ -150,6 +153,11 @@ The primary task drives RCM error to zero. The secondary task moves the
 tip toward its target using only null space motion — mathematically 
 guaranteed not to disturb the trocar point.
 
+> **Scope note:** The RCM constraint is enforced as a point-position task — joint
+> velocities are chosen to hold the trocar point stationary. A geometrically strict
+> formulation would additionally constrain the tool shaft line to pass through the
+> trocar point. This is a standard simplification in software-defined RCM literature.
+
 ---
 
 ## 6. Singularity Detection
@@ -184,14 +192,18 @@ q = q + dq_correction
 This is applied outside the velocity control loop as a direct position 
 correction. In 500 steps at dt=0.01, drift correction fired 2 times.
 
+> **Integration note:** Joint integration uses the first-order Euler method
+> (q ← q + dq·dt). Higher-order integration (e.g., Runge-Kutta) would reduce
+> accumulated error at larger timesteps.
+
 ---
 
 ## 8. Force Modeling — Scope Note
 
-Current implementation is kinematic only. Clinical specifications require 
-RCM maintenance under 31N lateral load and 5.6Nm torque at the trocar 
-point. Force-aware control incorporating tool-tissue interaction models 
-is a natural extension for future work.
+Current implementation is kinematic only. Published surgical robotics literature
+cites RCM tolerance requirements under lateral load (e.g., 31 N) and torque at
+the trocar point (e.g., 5.6 Nm) as representative benchmarks. Force-aware control
+incorporating tool-tissue interaction models is a natural extension for future work.
 
 ---
 
@@ -204,8 +216,8 @@ All metrics from actual simulation runs. No fabricated values.
 | RCM error mean | 0.0777 mm |
 | RCM error max | 0.5475 mm |
 | RCM error std | 0.0717 mm |
-| Clinical spec | 29.8 mm |
-| Margin | 384x |
+| Representative tolerance (literature) | 29.8 mm |
+| Margin vs representative tolerance | 384x |
 | Naive controller mean | 195.4 mm |
 | Drift corrections (500 steps) | 2 |
 | λ selected | 0.01 |

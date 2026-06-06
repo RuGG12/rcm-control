@@ -17,8 +17,8 @@ moves. Violating this constraint tears patient tissue.
 |--------|-------|
 | RCM error — mean | 0.0777 mm |
 | RCM error — max | 0.5475 mm |
-| Clinical spec limit | 29.8 mm |
-| Margin vs clinical spec | **384x** |
+| Representative tolerance (literature) | 29.8 mm |
+| Margin vs representative tolerance | **384x** |
 | Naive controller (no null space) | 195.4 mm mean drift |
 
 ![Comparison Plot](rcm_comparison.png)
@@ -28,10 +28,11 @@ moves. Violating this constraint tears patient tissue.
 ## Why this approach
 
 A naive pseudoinverse controller directly tracking the tip position produces 
-195.4mm of mean trocar drift — 6.5x beyond clinical tolerance. This controller 
-enforces the RCM constraint as the primary task via null-space projection, 
-relegating tip tracking to the remaining degrees of freedom. Damped least-squares 
-singularity handling keeps joint velocities bounded across all configurations.
+195.4mm of mean trocar drift — 6.5x beyond representative tolerances cited in 
+surgical robotics literature. This controller enforces the RCM constraint as 
+the primary task via null-space projection, relegating tip tracking to the 
+remaining degrees of freedom. Damped least-squares singularity handling keeps 
+joint velocities bounded across all configurations.
 
 Three specific design choices matter:
 

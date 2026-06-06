@@ -137,7 +137,7 @@ def print_metrics(history, dt=0.01):
     print(f"  RCM error — max         : {e_rcm.max():.4f} mm")
     print(f"  RCM error — std         : {e_rcm.std():.4f} mm")
     print("-"*55)
-    print(f"  Clinical spec limit     : 29.8000 mm")
+    print(f"  Representative tolerance (lit.) : 29.8000 mm")
     print(f"  Our target              : 0.5000 mm")
     print(f"  Achieved (mean)         : {e_rcm.mean():.4f} mm")
     print(f"  Margin vs clinical spec : {29.8/e_rcm.mean():.0f}x better")

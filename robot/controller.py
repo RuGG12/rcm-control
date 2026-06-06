@@ -80,6 +80,10 @@ class RCMController:
         N = self.null_space(J_rcm, J_rcm_pinv)
 
         # 6. Primary task — drive RCM error to zero
+        # NOTE: RCM constraint is enforced as a point-position task. A geometrically
+        # strict formulation would additionally constrain the tool shaft line to pass
+        # through the trocar point. This is a standard simplification in
+        # software-defined RCM literature.
         dq_primary = J_rcm_pinv @ (self.K1 * e_rcm)
 
         # 7. Secondary task — tip tracking + joint limit avoidance in null space
